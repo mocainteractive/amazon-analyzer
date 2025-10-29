@@ -6,4 +6,3 @@ textblob
 wordcloud
 matplotlib
 apify-client
-```
