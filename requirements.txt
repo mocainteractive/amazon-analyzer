@@ -1,0 +1,9 @@
+streamlit
+pandas
+plotly
+vaderSentiment
+textblob
+wordcloud
+matplotlib
+apify-client
+```
