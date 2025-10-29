@@ -77,7 +77,7 @@ def scrape_reviews_apify(product_url: str, max_reviews: int = 100) -> Optional[L
     Scrape Amazon reviews using Apify Actor (web_wanderer/amazon-reviews-extractor).
     
     Args:
-        product_url: Amazon product URL
+        product_url: Amazon product URL or ASIN
         max_reviews: Maximum number of reviews to scrape
         
     Returns:
@@ -86,7 +86,7 @@ def scrape_reviews_apify(product_url: str, max_reviews: int = 100) -> Optional[L
     try:
         from apify_client import ApifyClient
         
-        # Initialize Apify client (richiede API token)
+        # Initialize Apify client
         api_token = st.secrets.get("APIFY_API_TOKEN", None)
         
         if not api_token:
@@ -95,16 +95,29 @@ def scrape_reviews_apify(product_url: str, max_reviews: int = 100) -> Optional[L
         
         client = ApifyClient(api_token)
         
-        # Prepare Actor input
+        # Calculate pages needed (10 reviews per page)
+        pages_needed = min(10, (max_reviews // 10) + 1)
+        
+        # Prepare Actor input - SCHEMA CORRETTO
         run_input = {
-            "productUrls": [product_url],
-            "maxReviews": max_reviews,
-            "scrapeReviewerInfo": True,
+            "products": [product_url],  # ← CORRETTO: era "productUrls"
+            "limit": pages_needed,
+            "sort": "helpful",
+            "rating": "all",
+            "avp_reviews": False,
+            "include_variants": True,
+            "region": "amazon.com",
+            "language": "all"
         }
         
         # Run Actor
         with st.spinner("🔄 Scraping recensioni da Amazon via Apify..."):
             run = client.actor("web_wanderer/amazon-reviews-extractor").call(run_input=run_input)
+        
+        # Check if run was successful
+        if not run or run.get("status") != "SUCCEEDED":
+            st.error(f"❌ Errore Apify: Run fallito con status {run.get('status') if run else 'Unknown'}")
+            return None
         
         # Fetch results
         reviews = []
@@ -112,16 +125,20 @@ def scrape_reviews_apify(product_url: str, max_reviews: int = 100) -> Optional[L
             reviews.append({
                 'title': item.get('reviewTitle', ''),
                 'text': item.get('reviewText', ''),
-                'rating': item.get('stars', 0),
+                'rating': float(item.get('rating', 0)),
                 'date': item.get('reviewDate', ''),
                 'verified': item.get('verifiedPurchase', False),
-                'reviewer': item.get('reviewerName', 'Anonymous')
+                'reviewer': item.get('profileName', 'Anonymous')
             })
         
-        return reviews
+        return reviews[:max_reviews]  # Limit to requested number
     
+    except ImportError:
+        st.error("❌ Libreria apify-client non installata. Aggiungi 'apify-client' a requirements.txt")
+        return None
     except Exception as e:
         st.error(f"❌ Errore Apify: {str(e)}")
+        st.info("💡 Prova a usare un ASIN invece dell'URL completo (es: B07CMS5Q6P)")
         return None
 
 
